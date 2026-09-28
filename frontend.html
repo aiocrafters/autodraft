@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Auto Drafting — Document &amp; PDF Automation</title>
+</head>
+
+<body style="background: #f7fafc; margin: 0; padding: 24px;">
+
+    <div
+        style="background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); font-family: system-ui, -apple-system, sans-serif; margin: 0 auto; max-width: 1240px; padding: 28px;">
+
+        <!-- SECTION 1: LOGIN FORM -->
+        <div id="loginSection" style="padding: 20px 0;">
+            <div style="text-align: center; margin-bottom: 20px;">
+                <h2 style="color: #1a365d; margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.5px;">📄
+                    Auto Drafting</h2>
+                <p style="color: #718096; font-size: 13px; margin: 6px 0 0;">Authorized Document &amp; PDF Generation
+                    Engine</p>
+            </div>
+
+            <form id="loginForm" onsubmit="handleLogin(event)"
+                style="display: flex; flex-direction: column; gap: 14px; margin: 0 auto; max-width: 360px;">
+                <div>
+                    <label style="color: #4a5568; font-size: 13px; font-weight: 600;">Username</label>
+                    <input id="username" required
+                        style="border-radius: 6px; border: 1px solid #cbd5e0; box-sizing: border-box; margin-top: 4px; padding: 9px 12px; width: 100%; font-size: 14px; outline: none;"
+                        type="text" autocomplete="username" />
+                </div>
+                <div>
+                    <label style="color: #4a5568; font-size: 13px; font-weight: 600;">Password</label>
+                    <input id="password" required
+                        style="border-radius: 6px; border: 1px solid #cbd5e0; box-sizing: border-box; margin-top: 4px; padding: 9px 12px; width: 100%; font-size: 14px; outline: none;"
+                        type="password" autocomplete="current-password" />
+                </div>
+                <button id="loginBtn"
+                    style="background: #2b6cb0; border-radius: 6px; border: none; color: #ffffff; cursor: pointer; font-size: 14px; font-weight: 600; margin-top: 6px; padding: 11px;"
+                    type="submit">Sign In</button>
+            </form>
+            <p id="loginMsg"
+                style="color: #e53e3e; font-size: 13px; margin-top: 14px; min-height: 18px; text-align: center;"></p>
+        </div>
+
+        <!-- SECTION 2: FULL DATA TABLE & GENERATOR -->
+        <div id="generatorSection" style="display: none;">
+            <!-- Portal Header -->
+            <div
+                style="align-items: center; border-bottom: 2px solid #edf2f7; display: flex; justify-content: space-between; margin-bottom: 20px; padding-bottom: 14px;">
+                <div>
+                    <h2 style="color: #1a365d; font-size: 20px; font-weight: 700; margin: 0; letter-spacing: -0.5px;">📄
+                        Auto Drafting</h2>
+                    <span style="color: #718096; font-size: 12px;">Dynamic Spreadsheet-to-Document Generator</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 14px;">
+                    <span id="userGreeting" style="color: #2d3748; font-size: 13px; font-weight: 600;"></span>
+                    <button onclick="handleLogout()"
+                        style="background: #edf2f7; border-radius: 5px; border: 1px solid #cbd5e0; color: #4a5568; cursor: pointer; font-size: 12px; font-weight: 600; padding: 6px 14px;"
+                        type="button">Logout</button>
+                </div>
+            </div>
+
+            <!-- Controls Row: Filter and Dynamic Template Selector -->
+            <div style="display: flex; gap: 16px; margin-bottom: 16px; flex-wrap: wrap;">
+                <div style="flex: 2; min-width: 260px;">
+                    <label
+                        style="color: #1a365d; display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px;">🔍
+                        Filter Records:</label>
+                    <input id="searchInput" onkeyup="filterTable()" placeholder="Search any column text..."
+                        style="border-radius: 6px; border: 1px solid #cbd5e0; box-sizing: border-box; font-size: 14px; outline: none; padding: 9px 12px; width: 100%;"
+                        type="text" />
+                </div>
+
+                <div style="flex: 1; min-width: 240px;">
+                    <label
+                        style="color: #1a365d; display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px;">📄
+                        Select Template:</label>
+                    <select id="templateSelector"
+                        style="border-radius: 6px; border: 1px solid #cbd5e0; box-sizing: border-box; font-size: 14px; outline: none; padding: 9px 12px; width: 100%; background: #ffffff; cursor: pointer;">
+                    </select>
+                </div>
+            </div>
+
+            <p id="loadingMsg" style="color: #718096; font-style: italic; text-align: center; margin: 30px 0;">Loading
+                records from Google Sheets...</p>
+
+            <!-- Dynamic Responsive Data Table -->
+            <div id="tableWrapper"
+                style="border-radius: 8px; border: 1px solid #cbd5e0; display: none; margin-bottom: 18px; max-height: 460px; overflow-x: auto;">
+                <table id="entriesTable"
+                    style="border-collapse: collapse; font-size: 13px; text-align: left; white-space: nowrap; width: 100%;">
+                    <thead style="background: #edf2f7; position: sticky; top: 0; z-index: 10;">
+                        <tr id="tableHeaderRow">
+                            <th
+                                style="background: #edf2f7; border-bottom: 2px solid #cbd5e0; padding: 10px; text-align: center; width: 44px;">
+                                <input id="selectAllCb" onchange="toggleSelectAll(this)" style="cursor: pointer;"
+                                    type="checkbox" />
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody"></tbody>
+                </table>
+            </div>
+
+            <button id="generateBtn" onclick="generateFiles()"
+                style="background: #2b6cb0; border-radius: 6px; border: none; color: #ffffff; cursor: pointer; display: none; font-size: 15px; font-weight: 600; padding: 13px; width: 100%;">
+                Generate Selected Documents &amp; PDFs
+            </button>
+
+            <div id="statusMsg" style="font-size: 14px; line-height: 1.6; margin-top: 18px; text-align: center;"></div>
+        </div>
+
+    </div>
+
+    <script>
+        // =========================================================================
+        // REPLACE THIS URL WITH YOUR PUBLISHED APPS SCRIPT WEB APP URL
+        // =========================================================================
+        const WEB_APP_URL = "YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
+
+        window.addEventListener("DOMContentLoaded", function () {
+            const token = sessionStorage.getItem("app_token");
+            const username = sessionStorage.getItem("app_user");
+            if (token && username) showGeneratorUI(username, token);
+        });
+
+        function handleLogin(event) {
+            event.preventDefault();
+            const u = document.getElementById("username").value;
+            const p = document.getElementById("password").value;
+            const btn = document.getElementById("loginBtn");
+            const msg = document.getElementById("loginMsg");
+
+            btn.disabled = true;
+            msg.style.color = "#3182ce";
+            msg.innerText = "Authenticating...";
+
+            fetch(WEB_APP_URL, {
+                method: "POST",
+                headers: { "Content-Type": "text/plain;charset=utf-8" },
+                body: JSON.stringify({ action: "login", username: u, password: p })
+            })
+                .then(res => res.json())
+                .then(data => {
+                    btn.disabled = false;
+                    if (data.status === "success") {
+                        sessionStorage.setItem("app_token", data.token);
+                        sessionStorage.setItem("app_user", data.username);
+                        msg.innerText = "";
+                        showGeneratorUI(data.username, data.token);
+                    } else {
+                        msg.style.color = "#e53e3e";
+                        msg.innerText = data.message || "Invalid credentials.";
+                    }
+                })
+                .catch(() => {
+                    btn.disabled = false;
+                    msg.style.color = "#e53e3e";
+                    msg.innerText = "Connection error during login.";
+                });
+        }
+
+        function handleLogout() {
+            sessionStorage.removeItem("app_token");
+            sessionStorage.removeItem("app_user");
+            document.getElementById("loginSection").style.display = "block";
+            document.getElementById("generatorSection").style.display = "none";
+            document.getElementById("loginForm").reset();
+            document.getElementById("statusMsg").innerHTML = "";
+            document.getElementById("searchInput").value = "";
+        }
+
+        function showGeneratorUI(username, token) {
+            document.getElementById("loginSection").style.display = "none";
+            document.getElementById("generatorSection").style.display = "block";
+            document.getElementById("userGreeting").innerText = "👤 User: " + username;
+            document.getElementById("loadingMsg").style.display = "block";
+
+            fetch(WEB_APP_URL + "?token=" + encodeURIComponent(token))
+                .then(res => res.json())
+                .then(data => {
+                    document.getElementById("loadingMsg").style.display = "none";
+
+                    if (data.status === "success" && data.entries.length > 0) {
+                        // 1. Populate Templates dropdown
+                        const templateDropdown = document.getElementById("templateSelector");
+                        templateDropdown.innerHTML = "";
+                        if (data.availableTemplates && data.availableTemplates.length > 0) {
+                            data.availableTemplates.forEach(tpl => {
+                                const opt = document.createElement("option");
+                                opt.value = tpl.key;
+                                opt.textContent = tpl.name;
+                                templateDropdown.appendChild(opt);
+                            });
+                        }
+
+                        // 2. Build Dynamic Table Headers
+                        const headerRow = document.getElementById("tableHeaderRow");
+                        const tbody = document.getElementById("tableBody");
+
+                        headerRow.innerHTML = `
+          <th style="padding: 10px; border-bottom: 2px solid #cbd5e0; text-align: center; width: 44px; background: #edf2f7;">
+            <input type="checkbox" id="selectAllCb" onchange="toggleSelectAll(this)" style="cursor: pointer;"/>
+          </th>
+        `;
+                        tbody.innerHTML = "";
+
+                        const dynamicHeaders = data.headers || [];
+                        const primaryColName = data.primaryHeaderName || (dynamicHeaders[0] || "");
+
+                        dynamicHeaders.forEach(headerText => {
+                            const th = document.createElement("th");
+                            th.style.padding = "10px 14px";
+                            th.style.borderBottom = "2px solid #cbd5e0";
+                            th.style.background = "#edf2f7";
+                            th.style.color = "#2d3748";
+                            th.style.fontWeight = "bold";
+                            th.textContent = headerText;
+                            headerRow.appendChild(th);
+                        });
+
+                        // 3. Build Dynamic Rows
+                        data.entries.forEach(entry => {
+                            const tr = document.createElement("tr");
+                            tr.style.borderBottom = "1px solid #edf2f7";
+
+                            const tdCb = document.createElement("td");
+                            tdCb.style.padding = "10px";
+                            tdCb.style.textAlign = "center";
+                            const cb = document.createElement("input");
+                            cb.type = "checkbox";
+                            cb.value = entry.rowId;
+                            cb.className = "row-checkbox";
+                            cb.style.cursor = "pointer";
+                            tdCb.appendChild(cb);
+                            tr.appendChild(tdCb);
+
+                            dynamicHeaders.forEach(h => {
+                                const td = document.createElement("td");
+                                td.style.padding = "10px 14px";
+
+                                const isPrimary = (h === primaryColName);
+                                td.style.color = isPrimary ? "#1a365d" : "#4a5568";
+                                td.style.fontWeight = isPrimary ? "bold" : "normal";
+
+                                td.textContent = (entry.details && entry.details[h] !== undefined) ? entry.details[h] : "";
+                                tr.appendChild(td);
+                            });
+
+                            tbody.appendChild(tr);
+                        });
+
+                        document.getElementById("tableWrapper").style.display = "block";
+                        document.getElementById("generateBtn").style.display = "block";
+                    } else if (data.status === "auth_error") {
+                        alert("Session expired. Please log in again.");
+                        handleLogout();
+                    } else {
+                        document.getElementById("statusMsg").innerText = data.message || "No records found.";
+                    }
+                })
+                .catch(err => {
+                    console.error(err);
+                    document.getElementById("loadingMsg").innerText = "Failed to load table entries from Google Sheets.";
+                });
+        }
+
+        function filterTable() {
+            const query = document.getElementById("searchInput").value.toLowerCase().trim();
+            const rows = document.querySelectorAll("#tableBody tr");
+
+            rows.forEach(row => {
+                const text = row.innerText.toLowerCase();
+                row.style.display = text.includes(query) ? "" : "none";
+            });
+        }
+
+        function toggleSelectAll(masterCb) {
+            const rows = document.querySelectorAll("#tableBody tr");
+            rows.forEach(row => {
+                if (row.style.display !== "none") {
+                    const cb = row.querySelector(".row-checkbox");
+                    if (cb) cb.checked = masterCb.checked;
+                }
+            });
+        }
+
+        function generateFiles() {
+            const checkboxes = document.querySelectorAll(".row-checkbox:checked");
+            const selectedRowIds = Array.from(checkboxes).map(cb => cb.value);
+            const selectedTemplate = document.getElementById("templateSelector").value;
+
+            const statusMsg = document.getElementById("statusMsg");
+            const btn = document.getElementById("generateBtn");
+            const token = sessionStorage.getItem("app_token");
+
+            if (selectedRowIds.length === 0) {
+                statusMsg.style.color = "#e53e3e";
+                statusMsg.innerText = "Please select at least one record from the table.";
+                return;
+            }
+
+            btn.disabled = true;
+            btn.style.opacity = "0.6";
+            statusMsg.style.color = "#2b6cb0";
+            statusMsg.innerHTML = `⏳ Auto Drafting is generating ${selectedRowIds.length} document set(s)... Please wait.`;
+
+            fetch(WEB_APP_URL, {
+                method: "POST",
+                headers: { "Content-Type": "text/plain;charset=utf-8" },
+                body: JSON.stringify({
+                    action: "generate",
+                    token: token,
+                    selectedRowIds: selectedRowIds,
+                    selectedTemplate: selectedTemplate
+                })
+            })
+                .then(res => res.json())
+                .then(data => {
+                    btn.disabled = false;
+                    btn.style.opacity = "1";
+
+                    if (data.status === "success") {
+                        statusMsg.style.color = "#2f855a";
+                        let htmlOutput = `✅ Successfully created ${data.count} document set(s)!<br/><br/>`;
+                        htmlOutput += `<div style="display: flex; flex-direction: column; gap: 8px; align-items: center;">`;
+
+                        data.files.forEach(f => {
+                            htmlOutput += `
+          <div style="display: flex; gap: 10px; align-items: center; background: #f7fafc; padding: 7px 14px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 13px;">
+            <span style="font-weight: bold; color: #2d3748;">${f.identifier} (${f.templateUsed})</span>
+            <a href="${f.docUrl}" target="_blank" rel="noopener noreferrer" style="color: #3182ce; font-weight: bold; text-decoration: none;">📝 Edit Doc</a>
+            <a href="${f.pdfUrl}" target="_blank" rel="noopener noreferrer" style="color: #e53e3e; font-weight: bold; text-decoration: none;">📥 Download PDF</a>
+          </div>`;
+                        });
+
+                        htmlOutput += `</div>`;
+                        statusMsg.innerHTML = htmlOutput;
+                    } else if (data.status === "auth_error") {
+                        alert("Session expired. Please log in again.");
+                        handleLogout();
+                    } else {
+                        statusMsg.style.color = "#e53e3e";
+                        statusMsg.innerText = "Error: " + data.message;
+                    }
+                })
+                .catch(() => {
+                    btn.disabled = false;
+                    btn.style.opacity = "1";
+                    statusMsg.style.color = "#e53e3e";
+                    statusMsg.innerText = "Connection error while processing request.";
+                });
+        }
+    </script>
+</body>
+
+</html>
