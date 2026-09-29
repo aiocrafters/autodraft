@@ -176,33 +176,64 @@ function clearConfigCache() {
  *   Then deploy the script as a Web App.
  */
 function setupTriggers() {
-  var ss = SpreadsheetApp.getActive();
+  var props = PropertiesService.getScriptProperties();
+  var ss = null;
+  var spreadsheetId = "";
+
+  // 1. Try detecting active spreadsheet (if script was opened via Extensions → Apps Script)
+  try {
+    ss = SpreadsheetApp.getActive();
+    if (ss) {
+      spreadsheetId = ss.getId();
+      props.setProperty("SPREADSHEET_ID", spreadsheetId);
+    }
+  } catch (e) {
+    // Standalone script — proceed to fallback
+  }
+
+  // 2. If standalone, check if SPREADSHEET_ID is already saved in Script Properties
+  if (!ss) {
+    spreadsheetId = props.getProperty("SPREADSHEET_ID");
+    if (spreadsheetId) {
+      try {
+        ss = SpreadsheetApp.openById(spreadsheetId);
+      } catch (err) {
+        throw new Error(
+          "SPREADSHEET_ID '" + spreadsheetId + "' was found in Script Properties, " +
+          "but could not be opened. Please verify the ID and ensure your account has edit access."
+        );
+      }
+    }
+  }
+
+  // 3. If still not found, provide helpful instructions
   if (!ss) {
     throw new Error(
-      "Run setupTriggers() from the Apps Script editor opened via " +
-      "Extensions \u2192 Apps Script inside your Google Sheet."
+      "SPREADSHEET_ID is not configured yet.\n\n" +
+      "Because this Apps Script project was created as a standalone script (outside Google Sheets):\n" +
+      "1. In Apps Script, click Project Settings (⚙ icon on left sidebar)\n" +
+      "2. Under 'Script Properties', click 'Add script property'\n" +
+      "     Property: SPREADSHEET_ID\n" +
+      "     Value:    <Your Google Sheet ID from the URL between /d/ and /edit>\n" +
+      "3. Click 'Save script properties', then click ▶ Run on setupTriggers again."
     );
   }
 
-  // 1. Auto-save Spreadsheet ID to Script Properties
-  var spreadsheetId = ss.getId();
-  PropertiesService.getScriptProperties().setProperty("SPREADSHEET_ID", spreadsheetId);
-
-  // 2. Remove any existing onSheetChange triggers to prevent duplicates
+  // 4. Remove any existing onSheetChange triggers to prevent duplicates
   ScriptApp.getProjectTriggers().forEach(function (trigger) {
     if (trigger.getHandlerFunction() === "onSheetChange") {
       ScriptApp.deleteTrigger(trigger);
     }
   });
 
-  // 3. Install a fresh onChange trigger
+  // 5. Install fresh onChange trigger on the target spreadsheet
   ScriptApp.newTrigger("onSheetChange")
     .forSpreadsheet(ss)
     .onChange()
     .create();
 
   Logger.log("\u2705 Setup complete!");
-  Logger.log("   SPREADSHEET_ID saved: " + spreadsheetId);
+  Logger.log("   SPREADSHEET_ID linked: " + spreadsheetId);
   Logger.log("   onChange trigger installed.");
   Logger.log("   Next step: Deploy \u2192 New deployment \u2192 Web app.");
 }
