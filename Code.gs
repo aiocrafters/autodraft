@@ -6,15 +6,15 @@
  * SETUP ONCE — ZERO TOUCH FOREVER
  * =========================================================================
  *
- * ▶ DEVELOPER SETUP (one-time only — 3 steps, no code editing):
- *   1. Open your Google Sheet → Extensions → Apps Script
- *   2. Paste this file into the editor → Save
- *      Select "setupTriggers" from the function dropdown → click ▶ Run → Authorize
- *      (This auto-saves your Sheet ID and installs the live-sync trigger)
- *   3. Deploy → New deployment → Web app
+ * ▶ ONE-TIME DEVELOPER SETUP (2 minutes — no code changes needed):
+ *   1. In Apps Script → Project Settings (⚙ icon on left sidebar)
+ *        → Script Properties → Add script property:
+ *          Key   = SPREADSHEET_ID
+ *          Value = your Google Sheet ID (the string in the Sheet URL between /d/ and /edit)
+ *   2. Deploy → New deployment → Web app
  *        Execute as: Me  |  Who has access: Anyone
- *      Copy the Web App URL → paste into frontend.local.html
- *   ✅ Done. Neither you nor the user ever needs to touch this file again.
+ *   3. Copy the Web App URL → paste into frontend.local.html
+ *   ✅ Done! Neither you nor the user ever needs to touch Code.gs again.
  *
  * ▶ USER WORKFLOW — everything managed from Google Sheets:
  *   ┌─────────────────────┬──────────────────────────────────────────────┐
@@ -63,50 +63,49 @@ var DEFAULTS = {
 // =========================================================================
 
 /**
- * Reads all runtime configuration.
- *
- * PERFORMANCE: Serialisable config values (everything except the live `ss` object)
- * are cached in CacheService for 5 minutes. This means the CONFIG sheet is only
- * read on the very first request (or after a config change) — every subsequent
- * request within 5 minutes skips that Sheets API call entirely.
- *
- * To force a config refresh (e.g. after editing the CONFIG sheet), either:
- *   - Wait 5 minutes, OR
- *   - Run clearConfigCache() once from the Apps Script editor.
+ * Reads all runtime configuration directly from Google Sheets.
+ * Every edit made to the spreadsheet takes effect instantly on the next request.
+ * No triggers, background syncs, or manual cache-clearing required.
  */
 function getConfig() {
-
-  var CACHE_KEY = "autodraft_config_v1";
-  var CACHE_TTL = 300; // seconds (5 minutes)
-
-  // 1. Get Spreadsheet ID from Script Properties (never cached — must always be fresh)
-  var props         = PropertiesService.getScriptProperties();
+  var props = PropertiesService.getScriptProperties();
   var spreadsheetId = props.getProperty("SPREADSHEET_ID");
+  var ss = null;
 
-  if (!spreadsheetId) {
+  // 1. Try opening via SPREADSHEET_ID from Script Properties
+  if (spreadsheetId) {
+    try {
+      ss = SpreadsheetApp.openById(spreadsheetId);
+    } catch (e) {
+      throw new Error(
+        "Could not open spreadsheet with ID: '" + spreadsheetId + "'. " +
+        "Please verify the ID under Project Settings \u2192 Script Properties."
+      );
+    }
+  } else {
+    // 2. Fallback: if container-bound (inside Sheet), auto-detect and persist
+    try {
+      ss = SpreadsheetApp.getActive();
+      if (ss) {
+        spreadsheetId = ss.getId();
+        props.setProperty("SPREADSHEET_ID", spreadsheetId);
+      }
+    } catch (e) {}
+  }
+
+  if (!ss) {
     throw new Error(
-      "SPREADSHEET_ID is not set. " +
-      "In Apps Script go to: Project Settings \u2192 Script Properties \u2192 Add property: " +
-      "Key = SPREADSHEET_ID | Value = your Google Sheet ID."
+      "SPREADSHEET_ID is not configured.\n\n" +
+      "In Apps Script:\n" +
+      "1. Click Project Settings (\u2699 on left sidebar)\n" +
+      "2. Under 'Script Properties', click 'Add script property'\n" +
+      "     Property: SPREADSHEET_ID\n" +
+      "     Value:    <Your Google Sheet ID from URL between /d/ and /edit>\n" +
+      "3. Click 'Save script properties'."
     );
   }
 
-  // 2. Try the cache first
-  var cache      = CacheService.getScriptCache();
-  var cachedJson = cache.get(CACHE_KEY);
-
-  if (cachedJson) {
-    try {
-      var cached = JSON.parse(cachedJson);
-      // Re-attach the live Spreadsheet object (not serialisable, always fresh)
-      cached.ss = SpreadsheetApp.openById(spreadsheetId);
-      return cached;
-    } catch (e) { /* cache corrupt — fall through to full load */ }
-  }
-
-  // 3. Cache miss: open spreadsheet and read CONFIG sheet
-  var ss = SpreadsheetApp.openById(spreadsheetId);
-
+  // 3. Read CONFIG sheet live directly from the spreadsheet
   var configMap   = {};
   var configSheet = ss.getSheetByName("CONFIG");
 
@@ -124,7 +123,8 @@ function getConfig() {
     return v !== "" ? v : DEFAULTS[key];
   }
 
-  var config = {
+  return {
+    ss:                 ss,
     spreadsheetId:      spreadsheetId,
     dataSheetName:      cfg("DATA_SHEET_NAME"),
     usersSheetName:     cfg("USERS_SHEET_NAME"),
@@ -136,118 +136,6 @@ function getConfig() {
     maxFailedAttempts:  Math.max(1, parseInt(cfg("MAX_FAILED_ATTEMPTS"))  || DEFAULTS.MAX_FAILED_ATTEMPTS),
     lockoutMinutes:     Math.max(1, parseInt(cfg("LOCKOUT_MINUTES"))      || DEFAULTS.LOCKOUT_MINUTES)
   };
-
-  // 4. Store serialisable values in cache (ss object excluded)
-  cache.put(CACHE_KEY, JSON.stringify(config), CACHE_TTL);
-
-  // 5. Attach live Spreadsheet object before returning
-  config.ss = ss;
-  return config;
-}
-
-/**
- * [UTILITY] Manually clears the config cache.
- * Normally not needed — onSheetChange() does this automatically.
- * Fallback: run from Apps Script editor if the trigger was removed.
- */
-function clearConfigCache() {
-  CacheService.getScriptCache().remove("autodraft_config_v1");
-  Logger.log("\u2705 Config cache cleared.");
-}
-
-
-// =========================================================================
-// ONE-TIME DEVELOPER SETUP
-// =========================================================================
-
-/**
- * ▶ RUN THIS ONCE after pasting Code.gs into the Apps Script editor.
- *
- * What it does automatically:
- *   1. Reads the Google Sheet ID from the active spreadsheet
- *      and saves it to Script Properties — no manual copy-paste needed.
- *   2. Installs an onChange trigger so any edit to the spreadsheet
- *      instantly clears the config cache → the web app always reflects
- *      the current sheet state with zero manual intervention.
- *
- * How to run:
- *   Apps Script editor → function dropdown → select "setupTriggers" → ▶ Run
- *   Authorize when prompted (needed for trigger installation).
- *   Then deploy the script as a Web App.
- */
-function setupTriggers() {
-  var props = PropertiesService.getScriptProperties();
-  var ss = null;
-  var spreadsheetId = "";
-
-  // 1. Try detecting active spreadsheet (if script was opened via Extensions → Apps Script)
-  try {
-    ss = SpreadsheetApp.getActive();
-    if (ss) {
-      spreadsheetId = ss.getId();
-      props.setProperty("SPREADSHEET_ID", spreadsheetId);
-    }
-  } catch (e) {
-    // Standalone script — proceed to fallback
-  }
-
-  // 2. If standalone, check if SPREADSHEET_ID is already saved in Script Properties
-  if (!ss) {
-    spreadsheetId = props.getProperty("SPREADSHEET_ID");
-    if (spreadsheetId) {
-      try {
-        ss = SpreadsheetApp.openById(spreadsheetId);
-      } catch (err) {
-        throw new Error(
-          "SPREADSHEET_ID '" + spreadsheetId + "' was found in Script Properties, " +
-          "but could not be opened. Please verify the ID and ensure your account has edit access."
-        );
-      }
-    }
-  }
-
-  // 3. If still not found, provide helpful instructions
-  if (!ss) {
-    throw new Error(
-      "SPREADSHEET_ID is not configured yet.\n\n" +
-      "Because this Apps Script project was created as a standalone script (outside Google Sheets):\n" +
-      "1. In Apps Script, click Project Settings (⚙ icon on left sidebar)\n" +
-      "2. Under 'Script Properties', click 'Add script property'\n" +
-      "     Property: SPREADSHEET_ID\n" +
-      "     Value:    <Your Google Sheet ID from the URL between /d/ and /edit>\n" +
-      "3. Click 'Save script properties', then click ▶ Run on setupTriggers again."
-    );
-  }
-
-  // 4. Remove any existing onSheetChange triggers to prevent duplicates
-  ScriptApp.getProjectTriggers().forEach(function (trigger) {
-    if (trigger.getHandlerFunction() === "onSheetChange") {
-      ScriptApp.deleteTrigger(trigger);
-    }
-  });
-
-  // 5. Install fresh onChange trigger on the target spreadsheet
-  ScriptApp.newTrigger("onSheetChange")
-    .forSpreadsheet(ss)
-    .onChange()
-    .create();
-
-  Logger.log("\u2705 Setup complete!");
-  Logger.log("   SPREADSHEET_ID linked: " + spreadsheetId);
-  Logger.log("   onChange trigger installed.");
-  Logger.log("   Next step: Deploy \u2192 New deployment \u2192 Web app.");
-}
-
-
-/**
- * Fires automatically whenever any cell in the spreadsheet is edited.
- * Clears the config cache so the next web app request always gets
- * the latest CONFIG sheet values — no manual cache clearing ever needed.
- *
- * Installed by setupTriggers(). Do not rename or delete this function.
- */
-function onSheetChange(e) {
-  CacheService.getScriptCache().remove("autodraft_config_v1");
 }
 
 
