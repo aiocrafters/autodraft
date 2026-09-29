@@ -2,6 +2,8 @@
 
 > A fully dynamic, zero-maintenance document and PDF automation system powered by Google Sheets, Google Docs, Google Drive, and Google Apps Script.
 
+🌐 **Live Web App**: [https://aiocrafters.github.io/autodraft/](https://aiocrafters.github.io/autodraft/)
+
 **Auto Drafting** bridges your spreadsheet data with formatted Google Docs and downloadable PDFs. It dynamically renders records into a web portal, adapts instantly to any changes in your spreadsheet's structure, and batch-generates ready-to-dispatch documents in seconds.
 
 ---
@@ -12,7 +14,7 @@
 3. [Step 1: Google Sheet Architecture](#-step-1-google-sheet-architecture)
 4. [Step 2: Google Doc Template Setup](#-step-2-google-doc-template-setup)
 5. [Step 3: Apps Script Deployment (`Code.gs`)](#-step-3-apps-script-deployment-codegs)
-6. [Step 4: Frontend Web App Setup (`frontend.html`)](#-step-4-frontend-web-app-setup-frontendhtml)
+6. [Step 4: Frontend Setup & Hosting (`frontend.html` / `index.html`)](#-step-4-frontend-web-app-setup--hosting-frontendhtml--indexhtml)
 7. [Step 5: Using the Application](#-step-5-using-the-application)
 8. [Troubleshooting & FAQ](#-troubleshooting--faq)
 9. [Security Considerations](#-security-considerations)
@@ -180,7 +182,9 @@ You need **3 sheets minimum** (and up to 2 optional sheets) in your Google Sprea
 
 ---
 
-## 🖥️ Step 4: Frontend Web App Setup (`frontend.html`)
+## 🖥️ Step 4: Frontend Web App Setup & Hosting (`frontend.html` / `index.html`)
+
+### 4.1 — Running Locally (No Hosting Required)
 
 > **Security note:** `frontend.html` in this repository contains only a placeholder URL and is safe to share publicly. For your personal deployment, follow the steps below using `frontend.local.html`.
 
@@ -197,6 +201,49 @@ You need **3 sheets minimum** (and up to 2 optional sheets) in your Google Sprea
    ```
 5. Save the file.
 6. Open `frontend.local.html` directly in any modern web browser — **no server required**.
+
+---
+
+### 4.2 — Hosting the Frontend (Live Web Portal)
+
+You can host the frontend online so your team can access it from anywhere.
+
+#### 🔒 1. Is it safe to put `WEB_APP_URL` in the hosted HTML?
+
+**Yes. Here is why:**
+- **The URL itself does not give anyone access to your Google Sheet data.**
+- The backend requires a valid session token for every action (fetching data, fetching templates, generating documents).
+- No passwords, spreadsheet IDs, or Drive folder IDs are exposed in the HTML—everything is verified on Google's servers.
+- The backend enforces rate limiting (5 failed login attempts locks the user for 15 minutes) to protect against brute-force attacks.
+
+> [!NOTE]
+> If your GitHub repository is public, committing your live `WEB_APP_URL` to GitHub means anyone browsing the repository can see your Apps Script URL. While they still cannot log in without credentials from your `USERS` sheet, if you want complete privacy, keep the repository **private** or deploy using platforms like Netlify, Vercel, or Cloudflare Pages.
+
+#### 🚀 2. How to Host It (3 Great Options)
+
+##### Option A: GitHub Pages (Free & 1-minute setup — Recommended)
+1. In your repository, copy your `frontend.local.html` content to **`index.html`** (hosting services look for `index.html` as the default homepage).
+2. Commit and push to GitHub:
+   ```bash
+   git add index.html
+   git commit -m "feat: add frontend web interface for document and PDF automation"
+   git push origin main
+   ```
+3. In your GitHub repository:
+   - Go to **Settings → Pages**.
+   - Under **Build and deployment > Branch**, select `main` and root folder `/`, then click **Save**.
+4. In ~30 seconds, your site will be live at:
+   👉 **`https://aiocrafters.github.io/autodraft/`**
+
+##### Option B: Netlify / Vercel (Free & Instant Drag-and-Drop)
+1. Rename `frontend.local.html` to `index.html`.
+2. Go to [Netlify Drop](https://app.netlify.com/drop).
+3. Drag the folder containing `index.html` into the browser.
+4. It instantly gives you a live HTTPS URL with a free SSL certificate.
+
+##### Option C: Cloudflare Pages / Firebase Hosting
+1. Connect your repository to Cloudflare Pages or Firebase Hosting.
+2. Set the build output directory to the root directory where `index.html` lives.
 
 ---
 
