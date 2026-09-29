@@ -10,12 +10,19 @@
 const SPREADSHEET_ID = "YOUR_SPREADSHEET_ID_HERE";
 
 // Sheet Tab Names:
-const DATA_SHEET_NAME = "Form Responses 1";
-const USERS_SHEET_NAME = "USERS";
+const DATA_SHEET_NAME      = "Form Responses 1";
+const USERS_SHEET_NAME     = "USERS";
 const TEMPLATES_SHEET_NAME = "TEMPLATES";
-const CONFIG_SHEET_NAME = "CONFIG";
+const CONFIG_SHEET_NAME    = "CONFIG";
+const SESSIONS_SHEET_NAME  = "SESSIONS"; // Auto-created. Do NOT delete this tab.
 
 const DEFAULT_FOLDER_NAME = "Generated Documents";
+
+// ==================== SECURITY SETTINGS ====================
+const SESSION_EXPIRY_HOURS = 8;   // Sessions expire after this many hours
+const MAX_FAILED_ATTEMPTS  = 5;   // Max failed logins before lockout
+const LOCKOUT_MINUTES      = 15;  // How long the lockout lasts (minutes)
+// ===========================================================
 // =======================================================
 
 function getCurrentFormattedDate() {
@@ -129,7 +136,7 @@ function loadTemplates(ss) {
 function validateUser(username, password) {
   if (!username || !password) return false;
 
-  const ss = getTargetSpreadsheet();
+  const ss        = getTargetSpreadsheet();
   const userSheet = ss.getSheetByName(USERS_SHEET_NAME);
   if (!userSheet) return false;
 
@@ -144,14 +151,159 @@ function validateUser(username, password) {
   return false;
 }
 
+
+// =========================================================================
+// SESSION MANAGEMENT (Secure Token System)
+// =========================================================================
+
+/**
+ * Returns the SESSIONS sheet, creating it with headers if it doesn't exist.
+ * Columns: Token | Username | ExpiresAt | FailedAttempts | LockoutUntil
+ */
+function getSessionsSheet(ss) {
+  let sheet = ss.getSheetByName(SESSIONS_SHEET_NAME);
+  if (!sheet) {
+    sheet = ss.insertSheet(SESSIONS_SHEET_NAME);
+    sheet.appendRow(["Token", "Username", "ExpiresAt", "FailedAttempts", "LockoutUntil"]);
+    sheet.hideSheet();
+    const protection = sheet.protect().setDescription("Auto Drafting — Managed by script");
+    protection.setWarningOnly(true);
+  }
+  return sheet;
+}
+
+/**
+ * Generates a random session token derived from SHA-256 of time + randomness.
+ */
+function generateToken() {
+  const chars       = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  const randomBytes = Utilities.computeDigest(
+    Utilities.DigestAlgorithm.SHA_256,
+    new Date().getTime() + ":" + Math.random().toString()
+  );
+  let token = "";
+  randomBytes.forEach(function (b) {
+    token += chars.charAt(Math.abs(b) % chars.length);
+  });
+  return token; // 32-char random token
+}
+
+/**
+ * Removes all session rows where ExpiresAt is in the past (housekeeping).
+ */
+function cleanupSessions(sheet) {
+  const now  = new Date();
+  const data = sheet.getDataRange().getValues();
+  for (let i = data.length - 1; i >= 1; i--) {
+    const expiresAt = data[i][2];
+    if (expiresAt && new Date(expiresAt) < now) {
+      sheet.deleteRow(i + 1);
+    }
+  }
+}
+
+/**
+ * Creates a new session for a user, stores it in the SESSIONS sheet, and returns the token.
+ */
+function createSession(ss, username) {
+  const token     = generateToken();
+  const expiresAt = new Date(Date.now() + SESSION_EXPIRY_HOURS * 60 * 60 * 1000).toISOString();
+  const sheet     = getSessionsSheet(ss);
+  cleanupSessions(sheet); // prune stale sessions on each login
+  sheet.appendRow([token, username, expiresAt, 0, ""]);
+  return token;
+}
+
+/**
+ * Validates a session token against the SESSIONS sheet.
+ * Returns true only if the token exists and has not expired.
+ */
 function authenticateToken(token) {
   if (!token) return false;
   try {
-    const decoded = Utilities.newBlob(Utilities.base64Decode(token)).getDataAsString();
-    const parts = decoded.split(":");
-    return validateUser(parts[0], parts[1]);
+    const ss    = getTargetSpreadsheet();
+    const sheet = getSessionsSheet(ss);
+    const data  = sheet.getDataRange().getValues();
+    const now   = new Date();
+
+    for (let i = 1; i < data.length; i++) {
+      const rowToken  = String(data[i][0]).trim();
+      const expiresAt = data[i][2];
+      if (rowToken && rowToken === String(token).trim()) {
+        return expiresAt && new Date(expiresAt) > now;
+      }
+    }
+    return false;
   } catch (e) {
     return false;
+  }
+}
+
+
+// =========================================================================
+// RATE LIMITING
+// =========================================================================
+
+/**
+ * Checks if a username is currently locked out.
+ * Returns { locked: true, minutesLeft: N } or { locked: false }.
+ */
+function checkRateLimit(ss, username) {
+  const sheet = getSessionsSheet(ss);
+  const data  = sheet.getDataRange().getValues();
+  const now   = new Date();
+
+  for (let i = 1; i < data.length; i++) {
+    const rowToken     = String(data[i][0]).trim();
+    const rowUser      = String(data[i][1]).trim().toLowerCase();
+    const lockoutUntil = data[i][4];
+    // Rate-limit rows have no token value
+    if (!rowToken && rowUser === String(username).trim().toLowerCase()) {
+      if (lockoutUntil && new Date(lockoutUntil) > now) {
+        const minutesLeft = Math.ceil((new Date(lockoutUntil) - now) / 60000);
+        return { locked: true, minutesLeft: minutesLeft };
+      }
+    }
+  }
+  return { locked: false };
+}
+
+/**
+ * Records a failed login attempt. Triggers lockout after MAX_FAILED_ATTEMPTS.
+ */
+function recordFailedAttempt(ss, username) {
+  const sheet = getSessionsSheet(ss);
+  const data  = sheet.getDataRange().getValues();
+
+  for (let i = 1; i < data.length; i++) {
+    const rowToken = String(data[i][0]).trim();
+    const rowUser  = String(data[i][1]).trim().toLowerCase();
+    if (!rowToken && rowUser === String(username).trim().toLowerCase()) {
+      const attempts = (parseInt(data[i][3]) || 0) + 1;
+      sheet.getRange(i + 1, 4).setValue(attempts);
+      if (attempts >= MAX_FAILED_ATTEMPTS) {
+        const lockoutUntil = new Date(Date.now() + LOCKOUT_MINUTES * 60 * 1000).toISOString();
+        sheet.getRange(i + 1, 5).setValue(lockoutUntil);
+      }
+      return;
+    }
+  }
+  // No existing tracking row — create one
+  sheet.appendRow(["", String(username).trim(), "", 1, ""]);
+}
+
+/**
+ * Clears the failed-attempt tracking row for a user after a successful login.
+ */
+function clearFailedAttempts(ss, username) {
+  const sheet = getSessionsSheet(ss);
+  const data  = sheet.getDataRange().getValues();
+  for (let i = data.length - 1; i >= 1; i--) {
+    const rowToken = String(data[i][0]).trim();
+    const rowUser  = String(data[i][1]).trim().toLowerCase();
+    if (!rowToken && rowUser === String(username).trim().toLowerCase()) {
+      sheet.deleteRow(i + 1);
+    }
   }
 }
 
@@ -240,11 +392,28 @@ function doPost(e) {
 
     // --- LOGIN ---
     if (action === "login") {
-      const isValid = validateUser(payload.username, payload.password);
+      const username = String(payload.username || "").trim();
+      const password = String(payload.password || "").trim();
+
+      const ss = getTargetSpreadsheet();
+
+      // 1. Check rate limit before attempting credential validation
+      const rateCheck = checkRateLimit(ss, username);
+      if (rateCheck.locked) {
+        return responseJSON({
+          status:  "error",
+          message: `Too many failed attempts. Account locked for ${rateCheck.minutesLeft} more minute(s).`
+        });
+      }
+
+      // 2. Validate credentials
+      const isValid = validateUser(username, password);
       if (isValid) {
-        const token = Utilities.base64Encode(payload.username + ":" + payload.password);
-        return responseJSON({ status: "success", token: token, username: payload.username });
+        clearFailedAttempts(ss, username);         // Reset failure counter
+        const token = createSession(ss, username); // Issue proper session token
+        return responseJSON({ status: "success", token: token, username: username });
       } else {
+        recordFailedAttempt(ss, username);         // Track the failure
         return responseJSON({ status: "error", message: "Invalid username or password." });
       }
     }
@@ -297,8 +466,14 @@ function doPost(e) {
 
       const generatedFiles = [];
 
+      const totalRows = rawData.length;
+
       selectedRowIds.forEach((rowId, index) => {
         const rowIndex = parseInt(rowId, 10) - 1;
+
+        // --- Row ID bounds validation (prevents out-of-range access) ---
+        if (isNaN(rowIndex) || rowIndex < 1 || rowIndex >= totalRows) return;
+
         const row = rawData[rowIndex];
         if (!row) return;
 

@@ -45,7 +45,9 @@
 
 ## 🗂️ Step 1: Google Sheet Architecture
 
-You need **3 sheets minimum** (and 1 optional sheet) in your Google Spreadsheet — making it **3 or 4 tabs in total**.
+You need **3 sheets minimum** (and up to 2 optional sheets) in your Google Spreadsheet.
+
+> **Note:** A 5th sheet tab named `SESSIONS` is **automatically created and managed** by `Code.gs` on first login. Do not delete or edit it manually.
 
 ---
 
@@ -178,17 +180,21 @@ const CONFIG_SHEET_NAME    = "CONFIG";
 
 ## 🖥️ Step 4: Frontend Web App Setup (`frontend.html`)
 
-1. Open `frontend.html` in any text editor.
-2. Locate this line near the top of the `<script>` block:
+> **Security note:** `frontend.html` in this repository contains only a placeholder URL and is safe to share publicly. For your personal deployment, follow the steps below using `frontend.local.html`.
+
+1. Make a copy of `frontend.html` and name it **`frontend.local.html`**.
+   - This filename is listed in `.gitignore` and will **never be committed** to version control.
+2. Open `frontend.local.html` in any text editor.
+3. Locate this line near the top of the `<script>` block:
    ```javascript
    const WEB_APP_URL = "YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
    ```
-3. Replace the placeholder with the Web App URL you copied in Step 3.4:
+4. Replace the placeholder with the Web App URL you copied in Step 3.4:
    ```javascript
-   const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwZ3mXqR8vNpLtKoD2eJhYcGsUiF7aBnMwT5lPd/exec";
+   const WEB_APP_URL = "https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec";
    ```
-4. Save the file.
-5. Open `frontend.html` directly in any modern web browser — **no server required**.
+5. Save the file.
+6. Open `frontend.local.html` directly in any modern web browser — **no server required**.
 
 ---
 
@@ -240,11 +246,27 @@ const CONFIG_SHEET_NAME    = "CONFIG";
 **Q: I updated `Code.gs` but changes are not taking effect.**
 > A: You must create a **New Deployment** in Apps Script after every code change. Saving the script alone does not update the live Web App.
 
+**Q: My account is locked and I can't log in.**
+> A: After 5 failed login attempts, the account is locked for 15 minutes. The lockout is tracked in the `SESSIONS` sheet. To unlock immediately, open your Google Sheet, unhide the `SESSIONS` tab, delete the row for your username that has no token value, then re-hide the sheet.
+
+**Q: The `SESSIONS` sheet appeared automatically — is that normal?**
+> A: Yes. `Code.gs` automatically creates and manages the `SESSIONS` sheet on the first login. It stores active session tokens (with expiry) and failed-attempt counters. Do not delete or modify it manually.
+
 ---
 
 ## 🔒 Security Considerations
 
-- **Credentials are stored in plaintext** in the `USERS` Google Sheet. This is suitable for internal, low-sensitivity workflows. Do not use this system for high-security environments without adding proper encryption.
-- **Token mechanism**: The session token is a Base64-encoded `username:password` string. It provides session continuity but is not cryptographically secure. Avoid exposing the Web App URL publicly in sensitive contexts.
-- **Drive permissions**: Generated files are shared as `ANYONE_WITH_LINK` (view only for Docs, view/download for PDFs). Anyone who obtains a direct file link can access it. Restrict sharing settings in `Code.gs` if needed.
-- **Apps Script execution**: The script runs as *you* (the deployer) and has access to your Google Drive and Sheets. Review the OAuth scopes granted during the authorization step.
+### What has been hardened
+
+- **Secure Session Tokens**: Login no longer issues a reversible Base64 token. A random 32-character token (derived from SHA-256 of time + entropy) is issued instead and stored server-side in the `SESSIONS` sheet with an **8-hour expiry**. Tokens cannot be decoded to recover the password.
+- **Login Rate Limiting**: After **5 consecutive failed login attempts**, the account is locked for **15 minutes**. The lockout is tracked per username in the `SESSIONS` sheet and automatically lifted after the lockout period.
+- **Automatic Session Cleanup**: Expired sessions are pruned from the `SESSIONS` sheet on every new login, keeping it compact.
+- **Row ID Validation**: The generate action validates every row ID from the client — checking for NaN, negative values, and out-of-bounds indices — before any data access.
+- **Safe URL in Version Control**: `frontend.html` in the repository contains only a placeholder URL. The live URL lives in `frontend.local.html`, which is excluded by `.gitignore`.
+
+### Known limitations (remaining risk)
+
+- **Credentials stored in plaintext**: Passwords in the `USERS` sheet are plain text. This is suitable for internal, low-sensitivity workflows. For higher security, store SHA-256 hashes of passwords and hash the login input before comparing.
+- **Drive file sharing**: Generated files are set to `ANYONE_WITH_LINK`. Anyone who obtains a direct link can view the file without logging in. Restrict to `DOMAIN_WITH_LINK` if you are in a Google Workspace organisation.
+- **Apps Script execution context**: The script runs as *you* (the deployer) and has full access to your Google Drive and Sheets. Review the OAuth scopes granted during authorisation.
+- **No HTTPS enforcement on the frontend**: `frontend.local.html` is a local file opened via `file://`. Tokens are sent over HTTPS to the Apps Script endpoint, but the file itself is not served over a secure server.

@@ -1,0 +1,13 @@
+# ============================================================
+# Auto Drafting — .gitignore
+# ============================================================
+
+# If you keep a personal copy of frontend.html with the real
+# Web App URL configured, name it frontend.local.html and it
+# will never be committed to version control.
+frontend.local.html
+
+# Editor / OS artifacts
+.vscode/
+*.DS_Store
+Thumbs.db
