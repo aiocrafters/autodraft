@@ -60,28 +60,49 @@ var DEFAULTS = {
 
 /**
  * Reads all runtime configuration.
- *   - SPREADSHEET_ID  → from Script Properties (set once in Apps Script UI)
- *   - Everything else → from CONFIG sheet rows, falling back to DEFAULTS
  *
- * Returns a plain config object passed to every other function.
+ * PERFORMANCE: Serialisable config values (everything except the live `ss` object)
+ * are cached in CacheService for 5 minutes. This means the CONFIG sheet is only
+ * read on the very first request (or after a config change) — every subsequent
+ * request within 5 minutes skips that Sheets API call entirely.
+ *
+ * To force a config refresh (e.g. after editing the CONFIG sheet), either:
+ *   - Wait 5 minutes, OR
+ *   - Run clearConfigCache() once from the Apps Script editor.
  */
 function getConfig() {
 
-  // 1. Get Spreadsheet ID from Script Properties
+  var CACHE_KEY = "autodraft_config_v1";
+  var CACHE_TTL = 300; // seconds (5 minutes)
+
+  // 1. Get Spreadsheet ID from Script Properties (never cached — must always be fresh)
   var props         = PropertiesService.getScriptProperties();
   var spreadsheetId = props.getProperty("SPREADSHEET_ID");
 
   if (!spreadsheetId) {
     throw new Error(
       "SPREADSHEET_ID is not set. " +
-      "In Apps Script go to: Project Settings → Script Properties → Add property: " +
+      "In Apps Script go to: Project Settings \u2192 Script Properties \u2192 Add property: " +
       "Key = SPREADSHEET_ID | Value = your Google Sheet ID."
     );
   }
 
+  // 2. Try the cache first
+  var cache      = CacheService.getScriptCache();
+  var cachedJson = cache.get(CACHE_KEY);
+
+  if (cachedJson) {
+    try {
+      var cached = JSON.parse(cachedJson);
+      // Re-attach the live Spreadsheet object (not serialisable, always fresh)
+      cached.ss = SpreadsheetApp.openById(spreadsheetId);
+      return cached;
+    } catch (e) { /* cache corrupt — fall through to full load */ }
+  }
+
+  // 3. Cache miss: open spreadsheet and read CONFIG sheet
   var ss = SpreadsheetApp.openById(spreadsheetId);
 
-  // 2. Load the CONFIG sheet into a key→value map (keys are normalised to UPPER_SNAKE_CASE)
   var configMap   = {};
   var configSheet = ss.getSheetByName("CONFIG");
 
@@ -94,14 +115,12 @@ function getConfig() {
     });
   }
 
-  // Helper: return config value if present and non-empty, else the built-in default
   function cfg(key) {
     var v = configMap[key] || "";
     return v !== "" ? v : DEFAULTS[key];
   }
 
-  return {
-    ss:                 ss,
+  var config = {
     spreadsheetId:      spreadsheetId,
     dataSheetName:      cfg("DATA_SHEET_NAME"),
     usersSheetName:     cfg("USERS_SHEET_NAME"),
@@ -113,7 +132,24 @@ function getConfig() {
     maxFailedAttempts:  Math.max(1, parseInt(cfg("MAX_FAILED_ATTEMPTS"))  || DEFAULTS.MAX_FAILED_ATTEMPTS),
     lockoutMinutes:     Math.max(1, parseInt(cfg("LOCKOUT_MINUTES"))      || DEFAULTS.LOCKOUT_MINUTES)
   };
+
+  // 4. Store serialisable values in cache (ss object excluded)
+  cache.put(CACHE_KEY, JSON.stringify(config), CACHE_TTL);
+
+  // 5. Attach live Spreadsheet object before returning
+  config.ss = ss;
+  return config;
 }
+
+/**
+ * Call this from the Apps Script editor (Run → clearConfigCache) after
+ * editing the CONFIG sheet to apply changes immediately without waiting 5 min.
+ */
+function clearConfigCache() {
+  CacheService.getScriptCache().remove("autodraft_config_v1");
+  Logger.log("\u2705 Config cache cleared. Next request will reload CONFIG sheet.");
+}
+
 
 
 // =========================================================================
@@ -232,13 +268,22 @@ function generateToken() {
   return token;
 }
 
-/** Deletes rows from SESSIONS where ExpiresAt is in the past. */
+/** Deletes expired rows from SESSIONS, but at most once per hour to avoid slowdowns. */
 function cleanupSessions(sheet) {
+  var CLEANUP_CACHE_KEY = "autodraft_session_cleanup";
+  var cache = CacheService.getScriptCache();
+
+  // Skip cleanup if it ran within the last hour
+  if (cache.get(CLEANUP_CACHE_KEY)) return;
+
   var now  = new Date();
   var data = sheet.getDataRange().getValues();
   for (var i = data.length - 1; i >= 1; i--) {
     if (data[i][2] && new Date(data[i][2]) < now) sheet.deleteRow(i + 1);
   }
+
+  // Mark cleanup as done for the next hour
+  cache.put(CLEANUP_CACHE_KEY, "1", 3600);
 }
 
 /** Creates a session entry in SESSIONS sheet and returns the token. */
@@ -246,7 +291,7 @@ function createSession(config, username) {
   var token     = generateToken();
   var expiresAt = new Date(Date.now() + config.sessionExpiryHours * 3600000).toISOString();
   var sheet     = getSessionsSheet(config);
-  cleanupSessions(sheet);
+  cleanupSessions(sheet); // deferred — only runs if >1 hour since last cleanup
   sheet.appendRow([token, username, expiresAt, 0, ""]);
   return token;
 }
