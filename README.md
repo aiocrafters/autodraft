@@ -237,8 +237,8 @@ If your sheet tabs have different names, or you want to adjust security timings,
 
 ## 🛠️ Troubleshooting & FAQ
 
-**Q: I get `"Please specify a valid SPREADSHEET_ID"` error.**
-> A: You have not replaced the `SPREADSHEET_ID` placeholder in `Code.gs`. Open Apps Script, update the constant, and redeploy.
+**Q: I get `"SPREADSHEET_ID is not set"` error.**
+> A: You have not added the Script Property yet. In Apps Script go to **Project Settings → Script Properties → Add script property**: Key = `SPREADSHEET_ID`, Value = your Google Sheet ID. No code editing or redeployment needed.
 
 **Q: No templates appear in the dropdown.**
 > A: Create the `TEMPLATES` tab with the correct column structure as shown in Step 1. The system returns an error if no templates are configured.
@@ -258,11 +258,31 @@ If your sheet tabs have different names, or you want to adjust security timings,
 **Q: I updated `Code.gs` but changes are not taking effect.**
 > A: You must create a **New Deployment** in Apps Script after every code change. Saving the script alone does not update the live Web App.
 
+**Q: I edited the CONFIG sheet but the app is still using the old settings.**
+> A: Configuration is cached for **5 minutes** to reduce load times. To apply CONFIG changes immediately without waiting:
+> 1. Open Apps Script editor
+> 2. Select **`clearConfigCache`** from the function dropdown (top toolbar)
+> 3. Click **Run**
+> The cache is cleared instantly and the next request will reload the CONFIG sheet.
+
 **Q: My account is locked and I can't log in.**
 > A: After 5 failed login attempts, the account is locked for 15 minutes. The lockout is tracked in the `SESSIONS` sheet. To unlock immediately, open your Google Sheet, unhide the `SESSIONS` tab, delete the row for your username that has no token value, then re-hide the sheet.
 
 **Q: The `SESSIONS` sheet appeared automatically — is that normal?**
 > A: Yes. `Code.gs` automatically creates and manages the `SESSIONS` sheet on the first login. It stores active session tokens (with expiry) and failed-attempt counters. Do not delete or modify it manually.
+
+---
+
+## 🔧 Utility Functions
+
+These helper functions are built into [`Code.gs`](Code.gs) and can be run manually from the Apps Script editor when needed.
+
+**How to run any utility function:**
+> Apps Script editor → top toolbar → click the **function name dropdown** (shows `doGet` by default) → select the function → click **▶ Run**.
+
+| Function | Purpose | When to use |
+|---|---|---|
+| `clearConfigCache()` | Clears the 5-minute config cache | After editing the **CONFIG sheet** — forces the next request to reload your settings immediately instead of waiting up to 5 minutes |
 
 ---
 
@@ -272,7 +292,7 @@ If your sheet tabs have different names, or you want to adjust security timings,
 
 - **Secure Session Tokens**: Login no longer issues a reversible Base64 token. A random 32-character token (derived from SHA-256 of time + entropy) is issued instead and stored server-side in the `SESSIONS` sheet with an **8-hour expiry**. Tokens cannot be decoded to recover the password.
 - **Login Rate Limiting**: After **5 consecutive failed login attempts**, the account is locked for **15 minutes**. The lockout is tracked per username in the `SESSIONS` sheet and automatically lifted after the lockout period.
-- **Automatic Session Cleanup**: Expired sessions are pruned from the `SESSIONS` sheet on every new login, keeping it compact.
+- **Automatic Session Cleanup**: Expired sessions are pruned from the `SESSIONS` sheet automatically, but at most **once per hour** to avoid slowing down logins. The cleanup runs in the background on the first login after an hour has passed.
 - **Row ID Validation**: The generate action validates every row ID from the client — checking for NaN, negative values, and out-of-bounds indices — before any data access.
 - **Safe URL in Version Control**: `frontend.html` in the repository contains only a placeholder URL. The live URL lives in `frontend.local.html`, which is excluded by `.gitignore`.
 
