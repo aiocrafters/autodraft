@@ -106,15 +106,24 @@ You need **3 sheets minimum** (and up to 2 optional sheets) in your Google Sprea
 
 ### ⚙️ Optional Sheet (1)
 
-#### 4. `CONFIG` *(Optional)*
-**Purpose:** Custom settings, such as directing generated files to a specific Google Drive folder.
+#### 4. `CONFIG` *(Optional but Recommended)*
+**Purpose:** Controls all application settings without ever touching `Code.gs`.
 - **Columns**: Column A = Key, Column B = Value.
+- All keys are optional. If a key is absent or blank, the built-in default is used.
 
-| Key              | Value                                    |
-|------------------|------------------------------------------|
-| OUTPUT_FOLDER_ID | `1F3pXcAkLDD795jZQfd6QNmDfLHuw7hBv2rMcR` |
+| Key                   | Default Value          | Description                                         |
+|-----------------------|------------------------|-----------------------------------------------------|
+| `DATA_SHEET_NAME`     | `Form Responses 1`     | Tab containing your form/data records               |
+| `USERS_SHEET_NAME`    | `USERS`                | Tab containing login credentials                    |
+| `TEMPLATES_SHEET_NAME`| `TEMPLATES`            | Tab listing document templates                      |
+| `SESSIONS_SHEET_NAME` | `SESSIONS`             | Tab auto-managed by script (do not edit manually)   |
+| `DEFAULT_FOLDER_NAME` | `Generated Documents`  | Name of the auto-created output Drive folder        |
+| `OUTPUT_FOLDER_ID`    | *(blank)*              | Specific Drive Folder ID to use instead of auto     |
+| `SESSION_EXPIRY_HOURS`| `8`                    | Hours before a login session expires                |
+| `MAX_FAILED_ATTEMPTS` | `5`                    | Failed logins before account lockout                |
+| `LOCKOUT_MINUTES`     | `15`                   | Minutes an account stays locked after too many fails|
 
-> If you omit this sheet (or leave the value blank), the script automatically creates and uses a folder named `"Generated Documents"` in the same parent folder as your spreadsheet.
+> **Tip:** You only need to add rows for settings you want to override. Any missing key uses its default value automatically.
 
 ---
 
@@ -135,33 +144,36 @@ You need **3 sheets minimum** (and up to 2 optional sheets) in your Google Sprea
 
 ## 🚀 Step 3: Apps Script Deployment (`Code.gs`)
 
+> **You only do this once. You will never need to edit or redeploy `Code.gs` again.**
+
 ### 3.1 — Create the Apps Script Project
 
 1. Open your Google Sheet.
 2. Go to **Extensions → Apps Script**.
 3. Delete any existing code in the editor.
 4. Paste the full contents of `Code.gs` into the editor.
+5. Click **Save** (💾).
 
-### 3.2 — Configure the Spreadsheet ID
+### 3.2 — Set Your Spreadsheet ID (via Script Properties — no code editing)
 
-At the top of `Code.gs`, replace the placeholder with your actual Google Sheet ID:
+1. In Apps Script, click the **⚙ Project Settings** icon (left sidebar).
+2. Scroll down to **Script Properties** and click **Add script property**.
+3. Enter:
+   - **Property**: `SPREADSHEET_ID`
+   - **Value**: your Google Sheet ID *(the alphanumeric string in the Sheet URL between `/d/` and `/edit`)*
+4. Click **Save script properties**.
 
-```javascript
-const SPREADSHEET_ID = "1Tq8fWvR3mZnKpXoHjDcBsYeLu2gA5NdCiMbOtGkVwQr";
-```
+> That's it. `SPREADSHEET_ID` is now stored securely in the script and never appears in your code.
 
-Your Sheet ID is the alphanumeric string in the Sheet URL between `/d/` and `/edit`.
+### 3.3 — (Optional) Customise Settings via CONFIG Sheet
 
-### 3.3 — (Optional) Adjust Sheet Tab Names
+If your sheet tabs have different names, or you want to adjust security timings, simply add the relevant rows to your **CONFIG** sheet tab (see table in Step 1). No code editing required.
 
-If your sheet tabs have different names, update these constants:
+*Example — if your data tab is called `Submissions` instead of `Form Responses 1`:*
 
-```javascript
-const DATA_SHEET_NAME      = "Form Responses 1";
-const USERS_SHEET_NAME     = "USERS";
-const TEMPLATES_SHEET_NAME = "TEMPLATES";
-const CONFIG_SHEET_NAME    = "CONFIG";
-```
+| Key             | Value       |
+|-----------------|-------------|
+| DATA_SHEET_NAME | Submissions |
 
 ### 3.4 — Deploy as a Web App
 
@@ -174,7 +186,7 @@ const CONFIG_SHEET_NAME    = "CONFIG";
 4. Click **Deploy** and **Authorize** when prompted.
 5. Copy the **Web App URL** — you will need it in Step 4.
 
-> **Note:** Every time you modify `Code.gs`, you must create a **New Deployment** (or update the existing one). Saving the script file alone does **not** automatically update the live Web App.
+> **Note:** Because `Code.gs` contains zero hardcoded values, you will **never need to redeploy** unless you intentionally update the script code itself.
 
 ---
 
