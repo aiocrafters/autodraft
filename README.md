@@ -154,28 +154,19 @@ You need **3 sheets minimum** (and up to 2 optional sheets) in your Google Sprea
 4. Paste the full contents of `Code.gs` into the editor.
 5. Click **Save** (💾).
 
-### 3.2 — Set Your Spreadsheet ID (via Script Properties — no code editing)
+### 3.2 — Run `setupTriggers` (One-Click Auto-Setup — No Copy-Pasting Sheet ID)
 
-1. In Apps Script, click the **⚙ Project Settings** icon (left sidebar).
-2. Scroll down to **Script Properties** and click **Add script property**.
-3. Enter:
-   - **Property**: `SPREADSHEET_ID`
-   - **Value**: your Google Sheet ID *(the alphanumeric string in the Sheet URL between `/d/` and `/edit`)*
-4. Click **Save script properties**.
+1. In the Apps Script toolbar at the top, click the **function dropdown** (next to "Debug" / "Run", which may say `doGet`).
+2. Select **`setupTriggers`**.
+3. Click **▶ Run**.
+4. When prompted, click **Review permissions** and choose your Google account to authorize the script.
 
-> That's it. `SPREADSHEET_ID` is now stored securely in the script and never appears in your code.
+> **What `setupTriggers()` does automatically:**
+> - Detects your Google Sheet ID directly from the active spreadsheet and saves `SPREADSHEET_ID` to Script Properties.
+> - Installs an `onChange` trigger so that any edit to your Google Sheet automatically refreshes the system cache instantly.
+> - **Neither you nor your users will ever have to manually copy IDs or clear caches.**
 
-### 3.3 — (Optional) Customise Settings via CONFIG Sheet
-
-If your sheet tabs have different names, or you want to adjust security timings, simply add the relevant rows to your **CONFIG** sheet tab (see table in Step 1). No code editing required.
-
-*Example — if your data tab is called `Submissions` instead of `Form Responses 1`:*
-
-| Key             | Value       |
-|-----------------|-------------|
-| DATA_SHEET_NAME | Submissions |
-
-### 3.4 — Deploy as a Web App
+### 3.3 — Deploy as a Web App
 
 1. Click **Deploy → New deployment**.
 2. Click the gear icon ⚙ next to **"Select type"** and choose **Web app**.
@@ -183,10 +174,10 @@ If your sheet tabs have different names, or you want to adjust security timings,
    - **Description**: `Auto Drafting v1` (or any label)
    - **Execute as**: `Me` (your Google account)
    - **Who has access**: `Anyone` *(authentication is handled by the app itself)*
-4. Click **Deploy** and **Authorize** when prompted.
+4. Click **Deploy**.
 5. Copy the **Web App URL** — you will need it in Step 4.
 
-> **Note:** Because `Code.gs` contains zero hardcoded values, you will **never need to redeploy** unless you intentionally update the script code itself.
+> **Note:** Because `Code.gs` is 100% dynamic and reads everything from your Google Sheet, you will **never need to redeploy** unless you intentionally change the script code itself.
 
 ---
 
@@ -238,7 +229,7 @@ If your sheet tabs have different names, or you want to adjust security timings,
 ## 🛠️ Troubleshooting & FAQ
 
 **Q: I get `"SPREADSHEET_ID is not set"` error.**
-> A: You have not added the Script Property yet. In Apps Script go to **Project Settings → Script Properties → Add script property**: Key = `SPREADSHEET_ID`, Value = your Google Sheet ID. No code editing or redeployment needed.
+> A: You have not run `setupTriggers` yet. In Apps Script, select **`setupTriggers`** from the function dropdown and click **▶ Run** (or manually add `SPREADSHEET_ID` under **Project Settings → Script Properties**). No code editing or redeployment needed.
 
 **Q: No templates appear in the dropdown.**
 > A: Create the `TEMPLATES` tab with the correct column structure as shown in Step 1. The system returns an error if no templates are configured.
@@ -258,12 +249,8 @@ If your sheet tabs have different names, or you want to adjust security timings,
 **Q: I updated `Code.gs` but changes are not taking effect.**
 > A: You must create a **New Deployment** in Apps Script after every code change. Saving the script alone does not update the live Web App.
 
-**Q: I edited the CONFIG sheet but the app is still using the old settings.**
-> A: Configuration is cached for **5 minutes** to reduce load times. To apply CONFIG changes immediately without waiting:
-> 1. Open Apps Script editor
-> 2. Select **`clearConfigCache`** from the function dropdown (top toolbar)
-> 3. Click **Run**
-> The cache is cleared instantly and the next request will reload the CONFIG sheet.
+**Q: Do changes in the Google Sheet reflect automatically?**
+> A: **Yes, instantly!** When you run `setupTriggers()`, an `onChange` trigger is installed on your spreadsheet. Any time you add a user, template, data record, or modify the CONFIG tab, the cache is automatically refreshed. You do NOT need to redeploy or clear caches manually.
 
 **Q: My account is locked and I can't log in.**
 > A: After 5 failed login attempts, the account is locked for 15 minutes. The lockout is tracked in the `SESSIONS` sheet. To unlock immediately, open your Google Sheet, unhide the `SESSIONS` tab, delete the row for your username that has no token value, then re-hide the sheet.
@@ -282,7 +269,8 @@ These helper functions are built into [`Code.gs`](Code.gs) and can be run manual
 
 | Function | Purpose | When to use |
 |---|---|---|
-| `clearConfigCache()` | Clears the 5-minute config cache | After editing the **CONFIG sheet** — forces the next request to reload your settings immediately instead of waiting up to 5 minutes |
+| `setupTriggers()` | Auto-detects Sheet ID, saves `SPREADSHEET_ID` to Script Properties, and installs the live `onChange` trigger | **Run ONCE during initial setup** |
+| `clearConfigCache()` | Clears the 5-minute config cache manually | Fallback only — changes to the Google Sheet are already synced automatically via `onChange` |
 
 ---
 

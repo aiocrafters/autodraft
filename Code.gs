@@ -3,26 +3,30 @@
  * Project:     Auto Drafting
  * Description: Dynamic Document & PDF Automation Engine powered by Google Sheets
  *
- * DEPLOY ONCE — MANAGE EVERYTHING VIA GOOGLE SHEETS
+ * SETUP ONCE — ZERO TOUCH FOREVER
  * =========================================================================
  *
- * ▶ INITIAL SETUP (one-time only, no code editing needed):
- *   1. Deploy this script as a Web App (Deploy → New deployment)
- *        Execute as: Me | Who has access: Anyone
- *   2. In Apps Script → Project Settings → Script Properties → Add property:
- *        Key   = SPREADSHEET_ID
- *        Value = your Google Sheet ID  (the string in the Sheet URL between /d/ and /edit)
- *   3. Paste the Web App URL into your frontend.local.html
- *   ✅ Done. You NEVER need to edit or redeploy this file again.
+ * ▶ DEVELOPER SETUP (one-time only — 3 steps, no code editing):
+ *   1. Open your Google Sheet → Extensions → Apps Script
+ *   2. Paste this file into the editor → Save
+ *      Select "setupTriggers" from the function dropdown → click ▶ Run → Authorize
+ *      (This auto-saves your Sheet ID and installs the live-sync trigger)
+ *   3. Deploy → New deployment → Web app
+ *        Execute as: Me  |  Who has access: Anyone
+ *      Copy the Web App URL → paste into frontend.local.html
+ *   ✅ Done. Neither you nor the user ever needs to touch this file again.
  *
- * ▶ AFTER SETUP — manage everything from your Google Sheet:
+ * ▶ USER WORKFLOW — everything managed from Google Sheets:
  *   ┌─────────────────────┬──────────────────────────────────────────────┐
  *   │ USERS tab           │ Add / remove users and passwords             │
  *   │ TEMPLATES tab       │ Add / remove document templates              │
- *   │ CONFIG tab          │ Change sheet names, folder, security timings │
+ *   │ Form Responses tab  │ Add / edit data records                      │
+ *   │ CONFIG tab          │ Change folder, session timeout, sheet names  │
  *   └─────────────────────┴──────────────────────────────────────────────┘
+ *   Any edit in the spreadsheet is reflected INSTANTLY in the web app.
+ *   No redeployment. No cache clearing. No manual steps.
  *
- * ▶ FULL LIST OF CONFIG SHEET KEYS (all optional — defaults shown):
+ * ▶ CONFIG SHEET KEYS (all optional — defaults shown):
  *   Key                   Default value
  *   ─────────────────     ─────────────────────
  *   DATA_SHEET_NAME       Form Responses 1
@@ -142,12 +146,77 @@ function getConfig() {
 }
 
 /**
- * Call this from the Apps Script editor (Run → clearConfigCache) after
- * editing the CONFIG sheet to apply changes immediately without waiting 5 min.
+ * [UTILITY] Manually clears the config cache.
+ * Normally not needed — onSheetChange() does this automatically.
+ * Fallback: run from Apps Script editor if the trigger was removed.
  */
 function clearConfigCache() {
   CacheService.getScriptCache().remove("autodraft_config_v1");
-  Logger.log("\u2705 Config cache cleared. Next request will reload CONFIG sheet.");
+  Logger.log("\u2705 Config cache cleared.");
+}
+
+
+// =========================================================================
+// ONE-TIME DEVELOPER SETUP
+// =========================================================================
+
+/**
+ * ▶ RUN THIS ONCE after pasting Code.gs into the Apps Script editor.
+ *
+ * What it does automatically:
+ *   1. Reads the Google Sheet ID from the active spreadsheet
+ *      and saves it to Script Properties — no manual copy-paste needed.
+ *   2. Installs an onChange trigger so any edit to the spreadsheet
+ *      instantly clears the config cache → the web app always reflects
+ *      the current sheet state with zero manual intervention.
+ *
+ * How to run:
+ *   Apps Script editor → function dropdown → select "setupTriggers" → ▶ Run
+ *   Authorize when prompted (needed for trigger installation).
+ *   Then deploy the script as a Web App.
+ */
+function setupTriggers() {
+  var ss = SpreadsheetApp.getActive();
+  if (!ss) {
+    throw new Error(
+      "Run setupTriggers() from the Apps Script editor opened via " +
+      "Extensions \u2192 Apps Script inside your Google Sheet."
+    );
+  }
+
+  // 1. Auto-save Spreadsheet ID to Script Properties
+  var spreadsheetId = ss.getId();
+  PropertiesService.getScriptProperties().setProperty("SPREADSHEET_ID", spreadsheetId);
+
+  // 2. Remove any existing onSheetChange triggers to prevent duplicates
+  ScriptApp.getProjectTriggers().forEach(function (trigger) {
+    if (trigger.getHandlerFunction() === "onSheetChange") {
+      ScriptApp.deleteTrigger(trigger);
+    }
+  });
+
+  // 3. Install a fresh onChange trigger
+  ScriptApp.newTrigger("onSheetChange")
+    .forSpreadsheet(ss)
+    .onChange()
+    .create();
+
+  Logger.log("\u2705 Setup complete!");
+  Logger.log("   SPREADSHEET_ID saved: " + spreadsheetId);
+  Logger.log("   onChange trigger installed.");
+  Logger.log("   Next step: Deploy \u2192 New deployment \u2192 Web app.");
+}
+
+
+/**
+ * Fires automatically whenever any cell in the spreadsheet is edited.
+ * Clears the config cache so the next web app request always gets
+ * the latest CONFIG sheet values — no manual cache clearing ever needed.
+ *
+ * Installed by setupTriggers(). Do not rename or delete this function.
+ */
+function onSheetChange(e) {
+  CacheService.getScriptCache().remove("autodraft_config_v1");
 }
 
 
